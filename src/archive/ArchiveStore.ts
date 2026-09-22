@@ -1,4 +1,4 @@
-import { mkdir, rename } from "node:fs/promises";
+import { copyFile, mkdir, rename, unlink } from "node:fs/promises";
 import path from "node:path";
 
 export class ArchiveStore {
@@ -9,7 +9,13 @@ export class ArchiveStore {
     const targetDirectory = path.join(this.directory, day);
     await mkdir(targetDirectory, { recursive: true });
     const target = await this.uniqueTarget(targetDirectory, path.basename(imagePath));
-    await rename(imagePath, target);
+    try {
+      await rename(imagePath, target);
+    } catch (error) {
+      if (!(error instanceof Error && "code" in error && error.code === "EXDEV")) throw error;
+      await copyFile(imagePath, target);
+      await unlink(imagePath);
+    }
     return target;
   }
 

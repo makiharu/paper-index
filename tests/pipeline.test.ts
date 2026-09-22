@@ -26,9 +26,10 @@ test("findImages includes supported images and excludes non-images", async () =>
     writeFile(path.join(inbox, "b.JPEG"), "b"),
     writeFile(path.join(inbox, "c.png"), "c"),
     writeFile(path.join(inbox, "d.HEIC"), "d"),
+    writeFile(path.join(inbox, "e.pdf"), "e"),
     writeFile(path.join(inbox, "notes.txt"), "no"),
   ]);
-  assert.deepEqual((await findImages(inbox)).map((image) => path.basename(image)), ["a.jpg", "b.JPEG", "c.png", "d.HEIC"]);
+  assert.deepEqual((await findImages(inbox)).map((image) => path.basename(image)), ["a.jpg", "b.JPEG", "c.png", "d.HEIC", "e.pdf"]);
 });
 
 test("preprocesses HEIC for OCR but archives the original", async () => {

@@ -1,7 +1,7 @@
 import { readdir } from "node:fs/promises";
 import path from "node:path";
 
-const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".heic", ".heif"]);
+const IMAGE_EXTENSIONS = new Set([".jpg", ".jpeg", ".png", ".heic", ".heif", ".pdf"]);
 
 export async function findImages(directory: string): Promise<string[]> {
   const entries = await readdir(directory, { withFileTypes: true });

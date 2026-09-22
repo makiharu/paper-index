@@ -3,5 +3,11 @@ dist/
 coverage/
 .DS_Store
 
-# Runtime data must live outside this repository.
+# OCR cache and temporary runtime data stay outside this repository.
 .paper-inbox/
+
+# Original PDFs/images are retained locally but must never be committed.
+originals/
+
+# OCR results are retained locally but must never be committed.
+ocr-results/

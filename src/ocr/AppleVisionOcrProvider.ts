@@ -1,5 +1,6 @@
-import { access, mkdir } from "node:fs/promises";
+import { access, mkdir, stat } from "node:fs/promises";
 import { execFile } from "node:child_process";
+import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
@@ -43,12 +44,6 @@ export class AppleVisionOcrProvider implements OcrProvider {
 
   private async build(): Promise<void> {
     await mkdir(this.options.workDirectory, { recursive: true });
-    try {
-      await access(this.binaryPath);
-      return;
-    } catch {
-      // Build lazily so normal TypeScript development does not require Swift.
-    }
     const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
     const sourceCandidates = [
       path.resolve(moduleDirectory, "../../scripts/appleVisionOcr.swift"),
@@ -65,7 +60,19 @@ export class AppleVisionOcrProvider implements OcrProvider {
         // Try the next location for source and compiled layouts.
       }
     }
-    await execFileAsync("swiftc", [sourcePath, "-o", this.binaryPath, "-framework", "Vision", "-framework", "ImageIO", "-framework", "CoreGraphics"], {
+    try {
+      const [binary, source] = await Promise.all([stat(this.binaryPath), stat(sourcePath)]);
+      if (binary.mtimeMs >= source.mtimeMs) return;
+    } catch {
+      // Build lazily when the binary does not exist yet.
+    }
+    await execFileAsync("xcrun", ["--sdk", "macosx", "swiftc", sourcePath, "-o", this.binaryPath, "-framework", "Vision", "-framework", "ImageIO", "-framework", "CoreGraphics", "-framework", "PDFKit"], {
+      env: {
+        ...process.env,
+        // Avoid root-owned/global module caches. This also makes first-run
+        // compilation work in restricted environments.
+        CLANG_MODULE_CACHE_PATH: path.join(os.tmpdir(), "paper-inbox-swift-module-cache"),
+      },
       maxBuffer: 20 * 1024 * 1024,
     });
   }
