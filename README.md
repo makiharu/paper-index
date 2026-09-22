@@ -8,7 +8,7 @@
 ~/.paper-inbox/inbox/
   ↓ 画像列挙（jpg / jpeg / png / heic / heif）
   ↓ Queue（既定 concurrency 4）
-  ↓ OCR（Tesseract）
+  ↓ OCR（Apple Vision / macOS）
 ~/.paper-inbox/cache/*.json
   ↓ OCR成功時のみ
 ~/.paper-inbox/archive/YYYY-MM-DD/
@@ -20,7 +20,7 @@
 
 ## セットアップ
 
-必要環境：Node.js 20以上、npm、Tesseract OCR、HEICを扱う場合はImageMagick（HEIC delegate付き）。日本語を処理する場合は日本語traineddataも必要です。
+必要環境：Node.js 20以上、npm、macOSのSwift toolchain、HEICを扱う場合はImageMagick（HEIC delegate付き）。Tesseractを使う場合はTesseract OCRと日本語traineddataも必要です。
 
 macOS（Homebrew）の例：
 
@@ -41,9 +41,10 @@ npx paper-inbox process
 npx paper-inbox process --concurrency 4
 npx paper-inbox process --force
 npx paper-inbox process --runtime-dir /path/to/runtime --lang jpn+eng
+npx paper-inbox process --ocr tesseract
 ```
 
-`--force`はcacheを無視してOCRします。`PAPER_INBOX_HOME`でruntime directory、`PAPER_INBOX_OCR_LANG`で既定OCR言語を変更できます。処理対象は`inbox`直下の`.jpg`、`.jpeg`、`.png`、`.heic`、`.heif`です。HEIC/HEIFはImageMagickでOCR用の一時JPEGへ自動変換し、原本は変換せずarchiveへ移動します。変換ファイルは処理後に削除します。
+`--force`はcacheを無視してOCRします。`--ocr apple-vision`（既定）はmacOSのApple Visionを使い、VisionのRevision 3（回転・手書き認識を改善）と高精度モードで手書きメモを読み取ります。日本語・英語の候補を指定しつつ、自動言語検出も有効にしています。`--ocr tesseract`は印刷文字向けの代替Providerです。PAPER_INBOX_HOMEでruntime directory、`PAPER_INBOX_OCR_LANG`でTesseractの既定OCR言語を変更できます。処理対象は`inbox`直下の`.jpg`、`.jpeg`、`.png`、`.heic`、`.heif`です。HEIC/HEIFはImageMagickでOCR用の一時JPEGへ自動変換し、原本は変換せずarchiveへ移動します。変換ファイルは処理後に削除します。
 
 ログにはページごとの`success`、`cached`、`failed`と最終集計を表示します。1枚の失敗は残りの処理を止めません。
 
@@ -61,7 +62,7 @@ cacheにはsource、sourceHash、text、processedAt、sourceDateなどを保存�
 
 ## 境界と将来設計
 
-OCRは`OcrProvider`インターフェース越しに呼び出しており、Tesseract以外の実装へ交換できます。将来の構造化処理は`StructuredDocument`を生成し、`OutputProvider`へ渡す想定です。`PathResolver`はドキュメントを保存先のどこへ配置するかだけを決めます。
+OCRは`OcrProvider`インターフェース越しに呼び出しており、Apple Visionを主Provider、Tesseractを副Providerとして交換できます。Apple VisionのSwiftヘルパーは初回実行時に`work/`へビルドされます。将来の構造化処理は`StructuredDocument`を生成し、`OutputProvider`へ渡す想定です。`PathResolver`はドキュメントを保存先のどこへ配置するかだけを決めます。
 
 したがって、保存先（Local / GitHub / S3 / WebDAVなど）とパス決定（日付 / カテゴリ / テンプレートなど）は分離します。`daily-log`、GitHub API、特定のディレクトリ構造はコアにハードコードしていません。今回のPoCでは実際のOutputProviderやMarkdown生成は実装しません。
 

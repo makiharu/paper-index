@@ -1,0 +1,23 @@
+{
+  "name": "paper-inbox",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A restartable CLI pipeline for OCR-ing paper documents.",
+  "type": "module",
+  "bin": {
+    "paper-inbox": "dist/src/cli/index.js"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "test": "npm run build && node --test dist/tests/**/*.test.js",
+    "dev": "tsx src/cli/index.ts"
+  },
+  "engines": {
+    "node": ">=20"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}
