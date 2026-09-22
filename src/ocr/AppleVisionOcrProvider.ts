@@ -44,6 +44,8 @@ export class AppleVisionOcrProvider implements OcrProvider {
 
   private async build(): Promise<void> {
     await mkdir(this.options.workDirectory, { recursive: true });
+    const moduleCachePath = path.join(this.options.workDirectory, "swift-module-cache");
+    await mkdir(moduleCachePath, { recursive: true });
     const moduleDirectory = path.dirname(fileURLToPath(import.meta.url));
     const sourceCandidates = [
       path.resolve(moduleDirectory, "../../scripts/appleVisionOcr.swift"),
@@ -66,12 +68,13 @@ export class AppleVisionOcrProvider implements OcrProvider {
     } catch {
       // Build lazily when the binary does not exist yet.
     }
-    await execFileAsync("xcrun", ["--sdk", "macosx", "swiftc", sourcePath, "-o", this.binaryPath, "-framework", "Vision", "-framework", "ImageIO", "-framework", "CoreGraphics", "-framework", "PDFKit"], {
+    await execFileAsync("xcrun", ["--sdk", "macosx", "swiftc", sourcePath, "-module-cache-path", moduleCachePath, "-o", this.binaryPath, "-framework", "Vision", "-framework", "ImageIO", "-framework", "CoreGraphics", "-framework", "PDFKit"], {
       env: {
         ...process.env,
         // Avoid root-owned/global module caches. This also makes first-run
-        // compilation work in restricted environments.
-        CLANG_MODULE_CACHE_PATH: path.join(os.tmpdir(), "paper-inbox-swift-module-cache"),
+        // compilation work from a LaunchAgent and in restricted environments.
+        CLANG_MODULE_CACHE_PATH: moduleCachePath,
+        SWIFT_MODULECACHE_PATH: moduleCachePath,
       },
       maxBuffer: 20 * 1024 * 1024,
     });

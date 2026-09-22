@@ -12,6 +12,8 @@
     "test": "npm run build && node --test dist/tests/**/*.test.js",
     "process": "node dist/src/cli/index.js",
     "watch": "node dist/src/cli/index.js watch",
+    "classify": "node dist/src/cli/index.js classify",
+    "install:launch-agent": "scripts/install-launch-agent.sh",
     "dev": "tsx src/cli/index.ts"
   },
   "engines": {

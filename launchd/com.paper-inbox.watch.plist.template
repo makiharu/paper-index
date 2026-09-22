@@ -1,0 +1,41 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>com.paper-inbox.watch</string>
+  <key>ProgramArguments</key>
+  <array>
+    <string>__NODE__</string>
+    <string>__ENTRYPOINT__</string>
+    <string>watch</string>
+    <string>--inbox</string>
+    <string>__INBOX__</string>
+    <string>--originals</string>
+    <string>__ORIGINALS__</string>
+    <string>--results</string>
+    <string>__RESULTS__</string>
+    <string>--runtime-dir</string>
+    <string>__RUNTIME__</string>
+    <string>--ocr</string>
+    <string>__OCR__</string>
+  </array>
+  <key>WorkingDirectory</key>
+  <string>__PROJECT__</string>
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>__PATH__</string>
+  </dict>
+  <key>RunAtLoad</key>
+  <true/>
+  <key>KeepAlive</key>
+  <true/>
+  <key>ProcessType</key>
+  <string>Interactive</string>
+  <key>StandardOutPath</key>
+  <string>__LOG_DIR__/paper-inbox.log</string>
+  <key>StandardErrorPath</key>
+  <string>__LOG_DIR__/paper-inbox.error.log</string>
+</dict>
+</plist>
