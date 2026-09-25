@@ -4,7 +4,7 @@ import os from "node:os";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
-import type { OcrProvider, OcrResult } from "./OcrProvider.js";
+import type { OcrPage, OcrProvider, OcrResult } from "./OcrProvider.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -13,7 +13,7 @@ export interface AppleVisionOcrOptions {
   language?: string[];
 }
 
-interface VisionOutput { text: string; }
+interface VisionOutput { text: string; pages?: OcrPage[]; }
 
 export class AppleVisionOcrProvider implements OcrProvider {
   private readonly binaryPath: string;
@@ -30,7 +30,7 @@ export class AppleVisionOcrProvider implements OcrProvider {
     try {
       const result = await execFileAsync(this.binaryPath, [imagePath, ...this.language], { maxBuffer: 20 * 1024 * 1024 });
       const output = JSON.parse(result.stdout) as VisionOutput;
-      return { text: output.text };
+      return { text: output.text, pages: output.pages };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Apple Vision OCR failed for ${imagePath}: ${message}`);

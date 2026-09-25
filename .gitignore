@@ -11,3 +11,5 @@ originals/
 
 # OCR results are retained locally but must never be committed.
 ocr-results/
+
+output/

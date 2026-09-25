@@ -1,13 +1,16 @@
 import { mkdir, readFile, readdir, writeFile } from "node:fs/promises";
 import path from "node:path";
+import type { OcrPage } from "../ocr/OcrProvider.js";
 
 export interface ClassifiedOcrRecord {
   source: string;
   sourceJson: string;
   sourceHash?: string;
   processedAt?: string;
+  pageNumber?: number;
   date: string;
   sequence: number;
+  label?: string;
   text: string;
 }
 
@@ -16,6 +19,7 @@ interface OcrJsonRecord {
   sourceHash?: string;
   processedAt?: string;
   text?: string;
+  pages?: OcrPage[];
 }
 
 interface DateMarker {
@@ -38,17 +42,53 @@ export async function classifyOcrResults(resultsDirectory: string, outputDirecto
 
 export async function classifyOcrJsonFile(jsonPath: string, outputDirectory: string): Promise<number> {
   const record = JSON.parse(await readFile(jsonPath, "utf8")) as OcrJsonRecord;
+  const sourceJson = path.basename(jsonPath);
+  if (record.pages && record.pages.length > 0) return classifyPages(record, sourceJson, outputDirectory);
+  return classifyLegacyText(record, sourceJson, outputDirectory);
+}
+
+async function classifyPages(record: OcrJsonRecord, sourceJson: string, outputDirectory: string): Promise<number> {
+  const usedSequences = new Map<string, Set<number>>();
+  let written = 0;
+  for (const page of record.pages ?? []) {
+    const lines = page.text.split(/\r?\n/);
+    const marker = findDateMarkers(lines)[0];
+    const date = marker?.date ?? "_undated";
+    const sequences = usedSequences.get(date) ?? new Set<number>();
+    let sequence = marker?.explicitSequence ?? page.pageNumber;
+    while (sequences.has(sequence)) sequence += 1;
+    sequences.add(sequence);
+    usedSequences.set(date, sequences);
+    const text = marker ? lines.slice(marker.lineEnd + 1).join("\n").trim() : page.text.trim();
+    await writeClassified(outputDirectory, date, sequence, {
+      source: record.source ?? sourceJson,
+      sourceJson,
+      sourceHash: record.sourceHash,
+      processedAt: record.processedAt,
+      pageNumber: page.pageNumber,
+      date,
+      sequence,
+      label: date === "_undated" ? `_undated.${String(sequence)}` : formatLabel(date, sequence),
+      text,
+    });
+    written += 1;
+  }
+  return written;
+}
+
+async function classifyLegacyText(record: OcrJsonRecord, sourceJson: string, outputDirectory: string): Promise<number> {
   const text = record.text ?? "";
   const lines = text.split(/\r?\n/);
   const markers = findDateMarkers(lines);
   if (markers.length === 0) {
     await writeClassified(outputDirectory, "_undated", 1, {
-      source: record.source ?? path.basename(jsonPath),
-      sourceJson: path.basename(jsonPath),
+      source: record.source ?? sourceJson,
+      sourceJson,
       sourceHash: record.sourceHash,
       processedAt: record.processedAt,
       date: "_undated",
       sequence: 1,
+      label: "_undated.1",
       text,
     });
     return 1;
@@ -59,21 +99,20 @@ export async function classifyOcrJsonFile(jsonPath: string, outputDirectory: str
   for (let index = 0; index < markers.length; index += 1) {
     const marker = markers[index];
     const next = markers[index + 1];
-    const textStart = marker.lineEnd + 1;
-    const textEnd = next ? next.lineStart : lines.length;
-    const sectionText = lines.slice(textStart, textEnd).join("\n").trim();
+    const sectionText = lines.slice(marker.lineEnd + 1, next ? next.lineStart : lines.length).join("\n").trim();
     const sequences = usedSequences.get(marker.date) ?? new Set<number>();
     let sequence = marker.explicitSequence ?? 1;
     while (sequences.has(sequence)) sequence += 1;
     sequences.add(sequence);
     usedSequences.set(marker.date, sequences);
     await writeClassified(outputDirectory, marker.date, sequence, {
-      source: record.source ?? path.basename(jsonPath),
-      sourceJson: path.basename(jsonPath),
+      source: record.source ?? sourceJson,
+      sourceJson,
       sourceHash: record.sourceHash,
       processedAt: record.processedAt,
       date: marker.date,
       sequence,
+      label: formatLabel(marker.date, sequence),
       text: sectionText,
     });
     written += 1;
@@ -91,21 +130,48 @@ function findDateMarkers(lines: string[]): DateMarker[] {
 }
 
 function parseDateLine(line: string): Omit<DateMarker, "lineStart" | "lineEnd"> | undefined {
-  const compact = line.trim().match(/^(20\d{6})(?:\s+(\d+))?$/);
+  const normalized = line.trim().replace(/[，、,:：]/g, ".").replace(/\s+/g, " ");
+  const compact = normalized.match(/^(20\d{6})(?:[ .](?:[月日火水木金土曜]+[ .])?(\d+))?$/);
   if (compact) return { date: compact[1], explicitSequence: compact[2] ? Number(compact[2]) : undefined };
-  const separated = line.trim().match(/^(20\d{2})\s*[./年-]\s*(\d{1,2})\s*[./月-]\s*(\d{1,2})(?:\s*(?:日)?\s+(\d+))?$/);
+
+  const separated = normalized.match(/^(20\d{2})\s*[./年-]\s*(\d{1,2})\s*[./月-]\s*(\d{1,2})(?:\s*(?:日)?\s*[ .-]?[火水木金土日月曜]+[ .-]?(\d+)|\s*[ .-]+(\d+))?$/);
   if (!separated) return undefined;
-  const [, year, month, day, sequence] = separated;
+  const [, year, month, day, weekdaySequence, plainSequence] = separated;
   return {
     date: `${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`,
-    explicitSequence: sequence ? Number(sequence) : undefined,
+    explicitSequence: Number(weekdaySequence ?? plainSequence) || undefined,
   };
+}
+
+function formatLabel(date: string, sequence: number): string {
+  return `${date.slice(0, 4)}.${date.slice(4, 6)}.${date.slice(6, 8)}.${sequence}`;
 }
 
 async function writeClassified(outputDirectory: string, date: string, sequence: number, record: ClassifiedOcrRecord): Promise<void> {
   const directory = path.join(outputDirectory, date);
   await mkdir(directory, { recursive: true });
-  const source = record.source.replace(/[^\p{L}\p{N}._-]+/gu, "_");
-  const outputPath = path.join(directory, `${source}-${String(sequence).padStart(3, "0")}.json`);
+  const label = record.label ?? (date === "_undated" ? `_undated.${sequence}` : formatLabel(date, sequence));
+  const outputPath = path.join(directory, `${label}.json`);
   await writeFile(outputPath, `${JSON.stringify(record, null, 2)}\n`, "utf8");
+  if (date !== "_undated") await upsertMarkdown(outputDirectory, date, label, record.text);
+}
+
+async function upsertMarkdown(outputDirectory: string, date: string, label: string, text: string): Promise<void> {
+  const directory = path.join(outputDirectory, date);
+  const markdownPath = path.join(directory, `${date.slice(0, 4)}.${date.slice(4, 6)}.${date.slice(6, 8)}.md`);
+  let existing = "";
+  try {
+    existing = await readFile(markdownPath, "utf8");
+  } catch {
+    // Create the daily file on first page.
+  }
+  const sections = new Map<string, string>();
+  const sectionPattern = /^## (\d{4}\.\d{2}\.\d{2}\.\d+)\n([\s\S]*?)(?=^## |$(?![\s\S]))/gm;
+  for (const match of existing.matchAll(sectionPattern)) sections.set(match[1], match[2].trim());
+  sections.set(label, text.trim());
+  const body = [...sections.entries()]
+    .sort(([left], [right]) => left.localeCompare(right, undefined, { numeric: true }))
+    .map(([sectionLabel, sectionText]) => `## ${sectionLabel}\n\n${sectionText}\n`)
+    .join("\n");
+  await writeFile(markdownPath, `# ${date.slice(0, 4)}.${date.slice(4, 6)}.${date.slice(6, 8)}\n\n${body}`, "utf8");
 }

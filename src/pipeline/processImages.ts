@@ -37,6 +37,9 @@ export async function processImages(
       let preparedImage: PreparedImage | undefined;
       try {
         let record = !options.force ? await cache.get(imagePath) : undefined;
+        if (record && path.extname(imagePath).toLowerCase() === ".pdf" && (!record.pages || record.pages.length === 0)) {
+          record = undefined;
+        }
         if (record) {
           summary.cached += 1;
           options.onStatus?.(`[${index + 1}/${images.length}] ${label} - cached`);

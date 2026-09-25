@@ -7,6 +7,12 @@ import Vision
 
 struct Output: Encodable {
     let text: String
+    let pages: [PageOutput]
+}
+
+struct PageOutput: Encodable {
+    let pageNumber: Int
+    let text: String
 }
 
 guard CommandLine.arguments.count >= 2 else {
@@ -84,7 +90,8 @@ do {
         let lines = (request.results ?? []).compactMap { $0.topCandidates(1).first?.string }
         pageTexts.append(lines.joined(separator: "\n"))
     }
-    let output = try JSONEncoder().encode(Output(text: pageTexts.joined(separator: "\n\n")))
+    let pages = pageTexts.enumerated().map { PageOutput(pageNumber: $0.offset + 1, text: $0.element) }
+    let output = try JSONEncoder().encode(Output(text: pageTexts.joined(separator: "\n\n"), pages: pages))
     FileHandle.standardOutput.write(output)
     FileHandle.standardOutput.write(Data("\n".utf8))
 } catch {

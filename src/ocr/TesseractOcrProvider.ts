@@ -3,7 +3,7 @@ import { promisify } from "node:util";
 import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
 import os from "node:os";
 import path from "node:path";
-import type { OcrProvider, OcrResult } from "./OcrProvider.js";
+import type { OcrPage, OcrProvider, OcrResult } from "./OcrProvider.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -35,9 +35,12 @@ export class TesseractOcrProvider implements OcrProvider {
       // example the bundled Poppler wrapper) work there as they do in a shell.
       await execFileAsync("/bin/bash", ["-c", "exec pdftoppm \"$@\"", "paper-inbox", "-r", "200", "-png", imagePath, prefix], { maxBuffer: 20 * 1024 * 1024 });
       const pages = (await readdir(temporaryDirectory)).filter((file) => file.endsWith(".png")).sort((a, b) => a.localeCompare(b, undefined, { numeric: true }));
-      const texts = await Promise.all(pages.map(async (page) => (await this.recognizeFile(path.join(temporaryDirectory, page))).text));
+      const pageResults = await Promise.all(pages.map(async (page, index) => ({
+        pageNumber: index + 1,
+        text: (await this.recognizeFile(path.join(temporaryDirectory, page))).text,
+      })));
       const file = await stat(imagePath);
-      return { text: texts.join("\n\n"), sourceDate: file.birthtime.toISOString() };
+      return { text: pageResults.map((page) => page.text).join("\n\n"), pages: pageResults, sourceDate: file.birthtime.toISOString() };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Tesseract OCR failed for ${imagePath}: ${message}`);
@@ -52,7 +55,7 @@ export class TesseractOcrProvider implements OcrProvider {
         cwd: path.dirname(imagePath),
         maxBuffer: 20 * 1024 * 1024,
       });
-      return { text: result.stdout };
+      return { text: result.stdout, pages: [{ pageNumber: 1, text: result.stdout }] };
     } catch (error) {
       const message = error instanceof Error ? error.message : String(error);
       throw new Error(`Tesseract OCR failed for ${imagePath}: ${message}`);

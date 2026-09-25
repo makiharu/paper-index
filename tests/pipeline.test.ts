@@ -94,3 +94,26 @@ test("a valid cache skips OCR and archives the source", async () => {
   });
   assert.deepEqual(summary, { total: 1, processed: 0, cached: 1, failed: 0, archived: 1 });
 });
+
+test("reprocesses a PDF cache created before page metadata existed", async () => {
+  const { inbox, cache, archive } = await fixture();
+  const pdf = path.join(inbox, "scan.pdf");
+  await writeFile(pdf, "pdf-placeholder");
+  const store = new CacheStore(cache);
+  await store.put(pdf, { text: "old combined OCR" });
+  let calls = 0;
+  const provider: OcrProvider = {
+    async recognize() {
+      calls += 1;
+      return { text: "new combined OCR", pages: [{ pageNumber: 1, text: "new page OCR" }] };
+    },
+  };
+
+  const summary = await processImages([pdf], provider, store, new ArchiveStore(archive), {
+    concurrency: 1, force: false,
+  });
+  assert.equal(calls, 1);
+  assert.equal(summary.processed, 1);
+  assert.equal(summary.cached, 0);
+  assert.match(await readFile(path.join(cache, "scan.pdf.json"), "utf8"), /new page OCR/);
+});
