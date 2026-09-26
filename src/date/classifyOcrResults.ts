@@ -48,12 +48,19 @@ export async function classifyOcrJsonFile(jsonPath: string, outputDirectory: str
 }
 
 async function classifyPages(record: OcrJsonRecord, sourceJson: string, outputDirectory: string): Promise<number> {
+  const pageMarkers = (record.pages ?? []).map((page) => findDateMarkers(page.text.split(/\r?\n/))[0]);
+  const dateCounts = new Map<string, number>();
+  for (const marker of pageMarkers) {
+    if (marker) dateCounts.set(marker.date, (dateCounts.get(marker.date) ?? 0) + 1);
+  }
+  const dominantDate = [...dateCounts.entries()].sort((left, right) => right[1] - left[1])[0];
+  const documentDate = dominantDate && dominantDate[1] >= 2 ? dominantDate[0] : undefined;
   const usedSequences = new Map<string, Set<number>>();
   let written = 0;
-  for (const page of record.pages ?? []) {
+  for (const [index, page] of (record.pages ?? []).entries()) {
     const lines = page.text.split(/\r?\n/);
-    const marker = findDateMarkers(lines)[0];
-    const date = marker?.date ?? "_undated";
+    const marker = pageMarkers[index];
+    const date = marker?.date ?? documentDate ?? "_undated";
     const sequences = usedSequences.get(date) ?? new Set<number>();
     let sequence = marker?.explicitSequence ?? page.pageNumber;
     while (sequences.has(sequence)) sequence += 1;
@@ -137,6 +144,9 @@ function parseDateLine(line: string): Omit<DateMarker, "lineStart" | "lineEnd"> 
   const separated = normalized.match(/^(20\d{2})\s*[./年-]\s*(\d{1,2})\s*[./月-]\s*(\d{1,2})(?:\s*(?:日)?\s*[ .-]?[火水木金土日月曜]+[ .-]?(\d+)|\s*[ .-]+(\d+))?$/);
   if (!separated) return undefined;
   const [, year, month, day, weekdaySequence, plainSequence] = separated;
+  const monthNumber = Number(month);
+  const dayNumber = Number(day);
+  if (monthNumber < 1 || monthNumber > 12 || dayNumber < 1 || dayNumber > 31) return undefined;
   return {
     date: `${year}${month.padStart(2, "0")}${day.padStart(2, "0")}`,
     explicitSequence: Number(weekdaySequence ?? plainSequence) || undefined,
